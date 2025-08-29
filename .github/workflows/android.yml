@@ -1,0 +1,64 @@
+name: Android CI - Build Debug APK
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Unzip uploaded zip files (if any)
+      run: |
+        set -e
+        echo "Listing repo root:"
+        ls -la
+        ZIPFILES=$(ls *.zip 2>/dev/null || true)
+        if [ -n "$ZIPFILES" ]; then
+          echo "Found zip(s): $ZIPFILES"
+          mkdir extracted
+          for z in *.zip; do unzip -q "$z" -d extracted; done
+          shopt -s dotglob || true
+          # Move contents of extracted into workspace root
+          for item in extracted/*; do
+            if [ -d "$item" ]; then
+              mv "$item"/* .
+            else
+              mv "$item" .
+            fi
+          done
+          rm -rf extracted
+          echo "Unzip step completed."
+        else
+          echo "No zip file found, assuming repo already contains project files."
+        fi
+
+    - name: Set up JDK 17 (Temurin)
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        cache: gradle
+
+    - name: Set up Android SDK (tools & platform-tools)
+      uses: android-actions/setup-android@v2
+      with:
+        api-level: 33
+        build-tools: '33.0.2'
+
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew || true
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --no-daemon
+
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: HPSpellsApp-apk
+        path: app/build/outputs/apk/debug/app-debug.apk
